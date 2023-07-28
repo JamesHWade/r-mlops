@@ -16,24 +16,20 @@ tidymodels_prefer()        # handle common conflicts with tidymodels and others
 conflict_prefer("penguins", "palmerpenguins")
 
 # set the default ggplot2 theme to theme_bw
-theme_set(theme_bw())      
+theme_set(theme_bw())
 # enable tidymodels dark mode for console messages
-options(tidymodels.dark = TRUE) 
-
+options(tidymodels.dark = TRUE)
 
 # Exploratory Data Analysis -----------------------------------------------
 
 penguins %>%
   filter(!is.na(sex)) %>%
-  ggplot(aes(
-    x = flipper_length_mm,
-    y = bill_length_mm,
-    color = sex,
-    size = body_mass_g
-  )) +
+  ggplot(aes(x     = flipper_length_mm,
+             y     = bill_length_mm,
+             color = sex,
+             size  = body_mass_g)) +
   geom_point(alpha = 0.5) +
   facet_wrap(~species)
-
 
 # Prepare & Split Data ----------------------------------------------------
 
@@ -57,8 +53,6 @@ penguin_test  <- testing(penguin_split)
 
 # create folds for cross validation on the training data
 penguin_folds <- vfold_cv(penguin_train)
-
-
 
 # Create Recipe & Specify Models ------------------------------------------
 
@@ -84,30 +78,29 @@ tree_spec <-
 # simple neural network
 mlp_brulee_spec <-
   mlp(
-    hidden_units = tune(), epochs = tune(),
-    penalty = tune(), learn_rate = tune()
+    hidden_units = tune(),
+    epochs       = tune(),
+    penalty      = tune(),
+    learn_rate   = tune()
   ) %>%
   set_engine("brulee") %>%
   set_mode("classification")
-
 
 # Fit Models & Tune Hyperparameters ---------------------------------------
 
 # specify parameters for hyperparameter tuning with Bayesian optimization
 bayes_control <- control_bayes(no_improve = 10L,
                                time_limit = 20,
-                               save_pred = TRUE,
-                               verbose = TRUE)
+                               save_pred  = TRUE,
+                               verbose    = TRUE)
 
 # create a workflow set with recipe and models
 workflow_set <-
   workflow_set(
     preproc = list(penguin_rec),
-    models = list(
-      glm = glm_spec,
-      tree = tree_spec,
-      torch = mlp_brulee_spec
-    )
+    models = list(glm   = glm_spec,
+                  tree  = tree_spec,
+                  torch = mlp_brulee_spec)
   ) |>
   workflow_map("tune_bayes",
                iter = 50L,
@@ -126,7 +119,6 @@ rank_results(workflow_set,
 workflow_set |> autoplot()
 
 best_model_id <- "recipe_glm"
-
 
 # Finalize Model ----------------------------------------------------------
 
@@ -164,10 +156,13 @@ final_fit_to_deploy <- final_fit |> extract_workflow()
 
 v <- vetiver_model(final_fit_to_deploy, model_name = "penguins_model")
 
+model_board <- board_local(versioned = TRUE)
+model_board |> vetiver_pin_write(v)
+model_board |> vetiver_write_plumber("penguins_model")
+
 # create a model API with plumber
 pr() |>
   vetiver_api(v)
-
 
 # Create Dockerfile & Deploy ----------------------------------------------
 
