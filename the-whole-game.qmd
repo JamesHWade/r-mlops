@@ -1,0 +1,237 @@
+---
+title: "MLOps in R: The Whole Game"
+format: 
+  revealjs:
+    theme: [default, custom.scss]
+editor: visual
+execute: 
+  echo: true
+  eval: true
+  freeze: auto
+code-annotations: hover
+code-link: true
+---
+
+## 
+
+![](https://vetiver.rstudio.com/images/ml_ops_cycle.png)
+
+
+## Load Packages & Set Options
+
+<br>
+
+```{r}
+#| code-line-numbers: "|1,3,4,10|2,5,6|7-9|11-14"
+library(tidyverse)         # data wrangling and cleaning
+library(tidymodels)        # modeling and machine learning
+library(palmerpenguins)    # penguin dataset
+library(gt)                # creating table objects for data
+library(ranger)            # random forest model engine
+library(brulee)            # neural network with torch
+library(pins)              # sharing resources across sessions and users
+library(vetiver)           # model versioning and deployment
+library(plumber)           # API creation
+library(conflicted)        # handling function conflicts
+tidymodels_prefer()        # handle common conflicts with tidymodels
+conflict_prefer("penguins", "palmerpenguins")
+theme_set(theme_bw())           # set default ggplot2 theme
+options(tidymodels.dark = TRUE) # dark mode console messages
+```
+
+## Exploratory Data Analysis {auto-animate=true}
+
+Note: You should do more exploration than this for a new set of data.
+
+```{r}
+#| eval: false
+penguins %>%
+  filter(!is.na(sex)) %>%
+  ggplot(aes(x     = flipper_length_mm,
+             y     = bill_length_mm,
+             color = sex,
+             size  = body_mass_g)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(~species)
+```
+
+
+## Exploratory Data Analysis {auto-animate=true}
+
+Note: You should do more exploration than this for a new set of data.
+
+```{r}
+#| echo: false
+penguins %>%
+  filter(!is.na(sex)) %>%
+  ggplot(aes(x     = flipper_length_mm,
+             y     = bill_length_mm,
+             color = sex,
+             size  = body_mass_g)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(~species)
+```
+
+
+## Prepare & Split Data
+
+<br>
+
+```{r}
+#| code-line-numbers: "|1-5|7-13|15-16"
+# remove rows with missing sex, exclude year and island
+penguins_df <-
+  penguins |>
+  drop_na(sex) |>
+  select(-year, -island)
+
+# set the seed for reproducibility
+set.seed(1234)
+
+# Split the data into train and test sets stratified by sex
+penguin_split <- initial_split(penguins_df, strata = sex)
+penguin_train <- training(penguin_split)
+penguin_test  <- testing(penguin_split)
+
+# create folds for cross validation
+penguin_folds <- vfold_cv(penguin_train)
+```
+
+## Create Recipe
+
+See the [getting started page](https://recipes.tidymodels.org/articles/recipes.html) from the `{recipes}` pkgdown site to learn more. You can also learn more about the [recommended ordering of steps](https://recipes.tidymodels.org/articles/Ordering.html).
+
+. . . 
+
+<br>
+
+```{r}
+penguin_rec <-
+  recipe(sex ~ ., data = penguin_train) |>     # <1>
+  step_YeoJohnson(all_numeric_predictors()) |> # <2>
+  step_dummy(species) |>                       # <3>
+  step_normalize(all_numeric_predictors())  # <4>
+```
+
+1. Define the recipe on the training data with sex as the target and all other vars as predictors
+2. Apply Yeo-Johnson transformation to all numeric predictors for skewness
+3. Create dummy variables for nominal variable `species`
+4. Normalize all numeric predictors
+
+
+## Specify Models with `{parsnip}` {auto-animate=true}
+
+<br> 
+Logistic Regression
+
+```{r}
+glm_spec <-
+  logistic_reg(penalty = 1) |>
+  set_engine("glm")
+```
+
+. . . 
+
+<br>
+Random Forest
+
+```{r}
+tree_spec <-
+  rand_forest(min_n = tune()) |>
+  set_engine("ranger") |>
+  set_mode("classification")
+```
+
+## Specify Models with `{parsnip}` {auto-animate=true}
+
+<br>
+
+Neural Network with `{torch}`
+
+```{r}
+mlp_brulee_spec <-
+  mlp(
+    hidden_units = tune(),
+    epochs       = tune(),
+    penalty      = tune(),
+    learn_rate   = tune()
+  ) %>%
+  set_engine("brulee") %>%
+  set_mode("classification")
+```
+
+
+## Fit Models & Tune Hyperparameters
+
+<br>
+
+Use Bayes optimizaiton for hyperparameter tuning
+```{r}
+bayes_control <- control_bayes(no_improve = 10L,
+                               time_limit = 20,
+                               save_pred  = TRUE,
+                               verbose    = TRUE)
+```
+
+## Fit Models & Tune Hyperparameters
+
+Use `{workflowsets}` to fit all three model types with hyperparameter optimization for random forest and neural net models.
+
+```{r}
+workflow_set <-
+  workflow_set(
+    preproc = list(penguin_rec),
+    models  = list(glm   = glm_spec,
+                   tree  = tree_spec,
+                   torch = mlp_brulee_spec)
+  ) |>
+  workflow_map("tune_bayes",
+               iter      = 50L,
+               resamples = penguin_folds,
+               control   = bayes_control
+  )
+```
+
+## Compare Model Results {auto-animate=true}
+Tabular view
+```{r}
+# create table of best models defined using roc_auc metric
+rank_results(workflow_set,
+             rank_metric = "roc_auc",
+             select_best = TRUE) |>
+  gt()
+```
+
+## Compare Model Results {auto-animate=true}
+Plotting performance
+```{r}
+workflow_set |> autoplot()
+```
+
+. . . 
+
+```{r}
+best_model_id <- "recipe_glm"
+```
+
+## Finalize Fit
+
+```{r}
+#| code-line-numbers: "|1-5|7-11|13-16"
+# select best model
+best_fit <-
+  workflow_set |>
+  extract_workflow_set_result(best_model_id) |>
+  select_best(metric = "accuracy")
+
+# create workflow for best model
+final_workflow <-
+  workflow_set |>
+  extract_workflow(best_model_id) |>
+  finalize_workflow(best_fit)
+
+# fit final model with all data
+final_fit <-
+  final_workflow |>
+  last_fit(penguin_split)
+```
