@@ -22,6 +22,34 @@ options(tidymodels.dark = TRUE)
 
 # Exploratory Data Analysis -----------------------------------------------
 
+body_bg = "#111233"
+body_color = "#ffa275"
+link_color = "#99D9DD"
+
+# Create custom theme
+theme_custom <- function(base_size = 16, base_family = "") {
+  theme_classic(base_size = base_size, base_family = base_family) %+replace%
+    theme(
+      # Specify plot background
+      plot.background = element_rect(fill = body_bg, color = NA),
+      # Specify panel background
+      panel.background = element_rect(fill = body_bg, color = NA),
+      # Specify text and title colors
+      text = element_text(color = body_color),
+      title = element_text(color = body_color),
+      strip.background = element_rect(fill = body_bg, color = NA),
+      
+      # Specify axis line colors
+      axis.line = element_line(color = link_color),
+      axis.ticks = element_line(color = link_color),
+      # Specify axis text colors
+      strip.text = element_text(color = link_color),
+      axis.text = element_text(color = link_color),
+      axis.title = element_text(color = link_color),
+      legend.background = element_rect(fill = body_bg, color = NA)
+    )
+}
+
 penguins %>%
   filter(!is.na(sex)) %>%
   ggplot(aes(x     = flipper_length_mm,
@@ -29,7 +57,10 @@ penguins %>%
              color = sex,
              size  = body_mass_g)) +
   geom_point(alpha = 0.5) +
-  facet_wrap(~species)
+  facet_wrap(~species) +
+  scale_color_manual(values = c(body_color, link_color)) +
+  theme_custom() +
+  guides(size = guide_legend(override.aes = list(color = body_color)))
 
 # Prepare & Split Data ----------------------------------------------------
 
@@ -156,15 +187,25 @@ final_fit_to_deploy <- final_fit |> extract_workflow()
 
 v <- vetiver_model(final_fit_to_deploy, model_name = "penguins_model")
 
-model_board <- board_local(versioned = TRUE)
+model_board <- board_folder(path = "pins-r", versioned = TRUE)
 model_board |> vetiver_pin_write(v)
-model_board |> vetiver_write_plumber("penguins_model")
+write_board_manifest(model_board)
+
+# use board_url
+pin_loc     <- pins:::github_raw("JamesHWade/r-mlops/main/pins-r/_pins.yaml")
+model_board <- board_url(pin_loc)
+model_board |> vetiver::vetiver_write_plumber("penguins_model")
 
 # create a model API with plumber
 pr() |>
-  vetiver_api(v)
+  vetiver_api(v) |> 
+  plumber::pr_run(port = 8080)
 
 # Create Dockerfile & Deploy ----------------------------------------------
 
 # create a dockerfile
-vetiver_write_docker(v)
+model_board |> vetiver_prepare_docker("penguins_model")
+
+
+endpoint <- vetiver::vetiver_endpoint("https://jameshwade-penguins-model.hf.space:8080/predict")
+predict(endpoint, new_data = 1)

@@ -12,8 +12,8 @@ if (FALSE) {
     library(stats)
     library(workflows)
 }
-b <- board_folder(path = "~/Library/Application Support/pins")
-v <- vetiver_pin_read(b, "penguins_model", version = "20230728T184942Z-edbb3")
+b <- board_folder(path = "pins-r")
+v <- vetiver_pin_read(b, "penguins_model", version = "20230730T192359Z-54641")
 
 #* @plumber
 function(pr) {
