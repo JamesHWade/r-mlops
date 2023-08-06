@@ -1,0 +1,8 @@
+- source: the-whole-game.qmd
+  quarto-pub:
+    - id: 9b7bf4f6-5a6d-4023-8f49-a2ad7bbd9b01
+      url: 'https://jameshwade.quarto.pub/mlops-in-r-the-whole-game'
+- source: hyperparameter-tuning.qmd
+  quarto-pub:
+    - id: d8b45346-b6f1-445a-9d69-58a58919b6aa
+      url: 'https://jameshwade.quarto.pub/hyperparameters-tuning-with-tidymodels'

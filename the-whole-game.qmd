@@ -15,7 +15,6 @@ code-annotations: hover
 
 ![Source: [MLOPs with vetiver](https://vetiver.rstudio.com/)](https://vetiver.rstudio.com/images/ml_ops_cycle.png)
 
-
 ## Load Packages & Set Options
 
 <br>
@@ -69,7 +68,7 @@ theme_custom <- function(base_size = 18, base_family = "") {
 theme_set(theme_custom())           # set default ggplot2 theme
 ```
 
-## Exploratory Data Analysis {auto-animate=true}
+## Exploratory Data Analysis {auto-animate="true"}
 
 Note: You should do more exploration than this for a new set of data.
 
@@ -85,8 +84,7 @@ penguins |>
   facet_wrap(~species)
 ```
 
-
-## Exploratory Data Analysis {auto-animate=true}
+## Exploratory Data Analysis {auto-animate="true"}
 
 Note: You should do more exploration than this for a new set of data.
 
@@ -103,7 +101,6 @@ penguins |>
   guides(size = guide_legend(override.aes = list(color = body_color))) +
   scale_color_manual(values = c(body_color, link_color))
 ```
-
 
 ## Prepare & Split Data
 
@@ -133,7 +130,7 @@ penguin_folds <- vfold_cv(penguin_train)
 
 See the [getting started page](https://recipes.tidymodels.org/articles/recipes.html) from the `{recipes}` pkgdown site to learn more. You can also learn more about the [recommended ordering of steps](https://recipes.tidymodels.org/articles/Ordering.html).
 
-. . . 
+. . .
 
 <br>
 
@@ -142,19 +139,17 @@ penguin_rec <-
   recipe(sex ~ ., data = penguin_train) |>     # <1>
   step_YeoJohnson(all_numeric_predictors()) |> # <2>
   step_dummy(species) |>                       # <3>
-  step_normalize(all_numeric_predictors())  # <4>
+  step_normalize(all_numeric_predictors())     # <4>
 ```
 
-1. Define the recipe on the training data with sex as the target and all other vars as predictors
-2. Apply Yeo-Johnson transformation to all numeric predictors for skewness
-3. Create dummy variables for nominal variable `species`
-4. Normalize all numeric predictors
+1.  Define the recipe on the training data with sex as the target and all other vars as predictors
+2.  Apply Yeo-Johnson transformation to all numeric predictors for skewness
+3.  Create dummy variables for nominal variable `species`
+4.  Normalize all numeric predictors
 
+## Specify Models with `{parsnip}` {auto-animate="true"}
 
-## Specify Models with `{parsnip}` {auto-animate=true}
-
-<br> 
-Logistic Regression
+<br> Logistic Regression
 
 ```{r}
 glm_spec <-
@@ -162,10 +157,9 @@ glm_spec <-
   set_engine("glm")
 ```
 
-. . . 
+. . .
 
-<br>
-Random Forest
+<br> Random Forest
 
 ```{r}
 tree_spec <-
@@ -174,7 +168,7 @@ tree_spec <-
   set_mode("classification")
 ```
 
-## Specify Models with `{parsnip}` {auto-animate=true}
+## Specify Models with `{parsnip}` {auto-animate="true"}
 
 <br>
 
@@ -192,12 +186,12 @@ mlp_brulee_spec <-
   set_mode("classification")
 ```
 
-
 ## Fit Models & Tune Hyperparameters
 
 <br>
 
 Use Bayes optimizaiton for hyperparameter tuning
+
 ```{r}
 bayes_control <- control_bayes(no_improve = 10L,
                                time_limit = 20,
@@ -224,8 +218,10 @@ workflow_set <-
   )
 ```
 
-## Compare Model Results {auto-animate=true}
+## Compare Model Results {auto-animate="true"}
+
 Tabular view
+
 ```{r}
 # create table of best models defined using roc_auc metric
 rank_results(workflow_set,
@@ -234,13 +230,15 @@ rank_results(workflow_set,
   gt()
 ```
 
-## Compare Model Results {auto-animate=true}
+## Compare Model Results {auto-animate="true"}
+
 Plotting performance
+
 ```{r}
 workflow_set |> autoplot()
 ```
 
-. . . 
+. . .
 
 ```{r}
 best_model_id <- "recipe_glm"
@@ -268,7 +266,7 @@ final_fit <-
   last_fit(penguin_split)
 ```
 
-## Final Fit Metrics {auto-animate=true}
+## Final Fit Metrics {auto-animate="true"}
 
 ```{r}
 # show model performance
@@ -277,7 +275,7 @@ final_fit |>
   gt()
 ```
 
-## Final Fit Metrics {auto-animate=true}
+## Final Fit Metrics {auto-animate="true"}
 
 ```{r}
 final_fit |>
@@ -286,7 +284,7 @@ final_fit |>
   autoplot()
 ```
 
-## Create Vetiver Model & API {auto-animate=true}
+## Create Vetiver Model & API {auto-animate="true"}
 
 Create a vetiver model from final fit
 
@@ -301,12 +299,13 @@ model_board |>                                                    # <1>
   vetiver::vetiver_write_plumber("penguins_model")                # <1>
 write_board_manifest(model_board)                                 # <2>
 ```
-1. We need to modify the `plumber.R` file to work with a HuggingFace deployment.
-2. The manifest is what allows us to use a GitHub repo to store our model board.
 
-## Create Vetiver Model & API {auto-animate=true}
+1.  We need to modify the `plumber.R` file to work with a HuggingFace deployment.
+2.  The manifest is what allows us to use a GitHub repo to store our model board.
 
-Use `board_url()` to store our model in a GitHub repo. 
+## Create Vetiver Model & API {auto-animate="true"}
+
+Use `board_url()` to store our model in a GitHub repo.
 
 Note: For this to work, we first must push our changes to our GitHub repo.
 
@@ -318,9 +317,10 @@ model_board <- board_url(pin_loc)
 model_board |>                                                     # <1> 
   vetiver::vetiver_write_plumber("penguins_model")                 # <1>
 ```
-1. This results in an error because the board produced by board_url is not parsible.
 
-## Plumber API {auto-animate=true}
+1.  This results in an error because the board produced by board_url is not parsible.
+
+## Plumber API {auto-animate="true"}
 
 Original Plumber File
 
@@ -349,8 +349,7 @@ function(pr) {
 }
 ```
 
-
-## Plumber API {auto-animate=true}
+## Plumber API {auto-animate="true"}
 
 Updated Plumber File
 
@@ -381,9 +380,9 @@ function(pr) {
 }
 ```
 
-## Write Dockerfile {auto-animate=true}
+## Write Dockerfile {auto-animate="true"}
 
-Original Dockerfile 
+Original Dockerfile
 
 ```{dockerfile}
 # Generated by the vetiver package; edit with care
@@ -408,7 +407,7 @@ EXPOSE 8000
 ENTRYPOINT ["R", "-e", "pr <- plumber::plumb('/opt/ml/plumber.R'); pr$run(host = '0.0.0.0', port = 8000)"]
 ```
 
-## Write Dockerfile {auto-animate=true}
+## Write Dockerfile {auto-animate="true"}
 
 Updated Dockerfile
 
@@ -450,9 +449,9 @@ ENTRYPOINT ["R", "-e", "pr <- plumber::plumb('/opt/ml/plumber.R'); pr$run(host =
 
 Required files:
 
-* `vetiver_renv.lock`
-* `plumber.R`
-* `Dockerfile`
+-   `vetiver_renv.lock`
+-   `plumber.R`
+-   `Dockerfile`
 
 Here is an example [deployment example hosted on HuggingFace Spaces](https://huggingface.co/spaces/jameshwade/penguins-model).
 
@@ -550,15 +549,12 @@ vetiver_plot_metrics(original_metrics) +
   guides(size = guide_legend(override.aes = list(color = body_color)))
 ```
 
-
 ## What could I improve?
 
 <br>
 
-::: {.incremental}
-
-1. A less bloated vetiver_renv.lock
-2. Plumber and Dockerfiles that work out of the box
-3. Implement model monitoring
-
+::: incremental
+1.  A less bloated vetiver_renv.lock
+2.  Plumber and Dockerfiles that work out of the box
+3.  Implement model monitoring
 :::

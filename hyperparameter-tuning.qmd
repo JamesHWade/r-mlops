@@ -1,0 +1,323 @@
+---
+title: "Hyperparameters tuning with tidymodels"
+format: 
+  revealjs:
+    theme: [default, custom.scss]
+editor: visual
+execute: 
+  echo: true
+  eval: true
+  freeze: true
+code-annotations: hover
+code-line-numbers: false
+---
+
+## 
+
+![Source: [MLOPs with vetiver](https://vetiver.rstudio.com/)](https://vetiver.rstudio.com/images/ml_ops_cycle.png)
+
+## {.center}
+
+Hyperparameter tuning is a important skill to 🚀 **boost model performance** 🚀
+
+. . . 
+
+<br>
+
+but...
+
+<br>
+
+. . . 
+
+you **waste time** 😴 without an intentional & systematic approach.
+
+## From last time
+
+```{r}
+#| code-fold: true
+#| code-summary: "Load Pacakges & Set Options"
+library(tidyverse)      
+library(tidymodels)     
+library(palmerpenguins) # penguin dataset
+library(gt)             # better tables
+library(bonsai)         # tree-based models
+library(conflicted)     # function conflicts
+tidymodels_prefer()     # handle conflicts
+conflict_prefer("penguins", "palmerpenguins")
+options(tidymodels.dark = TRUE) # dark mode
+theme_set(theme_bw()) # set default ggplot2 theme
+```
+
+```{r}
+#| eval: false
+#| code-fold: true
+#| code-summary: "Exploratory Data Analysis"
+penguins |>
+  filter(!is.na(sex)) |>
+  ggplot(aes(x     = flipper_length_mm,
+             y     = bill_length_mm,
+             color = sex,
+             size  = body_mass_g)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(~species)
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "Prepare & Split Data"
+# remove rows with missing sex
+# exclude year and island
+penguins_df <-
+  penguins |>
+  drop_na(sex) |>
+  select(-year, -island)
+
+# set the seed for reproducibility
+set.seed(1234)
+
+# Split the data into train and test sets
+# stratify by sex
+penguin_split <- initial_split(penguins_df,
+                               strata = sex)
+penguin_train <- training(penguin_split)
+penguin_test  <- testing(penguin_split)
+
+# create folds for cross validation
+penguin_folds <- vfold_cv(penguin_train, v = 10, strata = sex)
+```
+
+## Create Recipe
+
+For more on creating recipes, see the [getting started page](https://recipes.tidymodels.org/articles/recipes.html) from the `{recipes}` pkgdown site. You can also learn more about the [recommended ordering of steps](https://recipes.tidymodels.org/articles/Ordering.html). For recommend preprocessing steps based on model type, see the [Appendix from *Tidy Modeling with R*](https://www.tmwr.org/pre-proc-table).
+
+. . .
+
+<br>
+
+```{r}
+penguin_rec <-
+  recipe(sex ~ ., data = penguin_train) |>    
+  step_dummy(species)
+```
+
+## Specify Model
+
+Let's specify a boosted tree model with `boost_tree()` from `{bonsai}`.
+
+```{r}
+#| code-line-numbers: "|3,4,7"
+rlang::check_installed("lightgbm")
+bt_bonsai_spec <-
+  boost_tree(learn_rate     = tune(),
+             stop_iter      = tune(),
+             trees          = 1000) |>
+  set_engine(engine     = "lightgbm",
+             num_leaves = tune()) |>
+  set_mode("classification")
+```
+
+## Build Grid for Tuning {auto-animate="true"}
+
+```{r}
+bt_bonsai_spec |> 
+  extract_parameter_set_dials()
+```
+
+. . .
+
+```{r}
+num_leaves()
+```
+
+## Build Grid for Tuning {auto-animate="true"}
+
+```{r}
+grid_tune <- 
+  bt_bonsai_spec |> 
+  extract_parameter_set_dials() |> 
+  grid_latin_hypercube(size = 50)
+```
+
+. . .
+
+<br>
+
+```{r}
+grid_tune |> glimpse(width = 50)
+```
+
+## Fit Models & Tune Hyperparameters {auto-animate="true"}
+
+Construct our workflow
+
+```{r}
+bt_bonsai_wf <-
+  workflow() |> 
+  add_recipe(penguin_rec) |> 
+  add_model(bt_bonsai_spec)
+```
+
+. . .
+
+Specify the grid control parameters
+
+```{r}
+cntl   <- control_grid(save_pred     = TRUE,
+                       save_workflow = TRUE)
+```
+
+## Fit Models & Tune Hyperparameters {auto-animate="true"}
+
+```{r}
+bt_tune_grid <- 
+  bt_bonsai_wf |> 
+  tune_grid(
+    resamples = penguin_folds,
+    grid      = grid_tune,
+    control   = cntl
+  )
+```
+
+## Tuning Results
+
+```{r}
+autoplot(bt_tune_grid)
+```
+
+## Racing with `{finetune}` {auto-animate="true"}
+
+```{r}
+library(finetune)
+race_cntl <- control_race(save_pred     = TRUE,
+                          save_workflow = TRUE)
+```
+
+## Racing with `{finetune}` {auto-animate="true"}
+
+```{r}
+library(finetune)
+race_cntl <- control_race(save_pred     = TRUE,
+                          save_workflow = TRUE)
+bt_tune_race <- 
+  bt_bonsai_wf |> 
+  tune_race_anova(
+    resamples = penguin_folds,
+    grid      = grid_tune,
+    control   = race_cntl
+  )
+```
+
+## Racing Results
+
+```{r}
+autoplot(bt_tune_race)
+```
+
+## Racing Results
+
+```{r}
+plot_race(bt_tune_race)
+```
+
+## Faster 🏎️💨 {auto-animate="true"}
+
+```{r}
+big_grid <- 
+  bt_bonsai_spec |> 
+  extract_parameter_set_dials() |> 
+  grid_latin_hypercube(size = 250)
+```
+
+## Faster 🏎️💨 {auto-animate="true"}
+
+```{r}
+# tune in parallel
+library(doMC)
+registerDoMC(cores = 10)
+```
+
+## Faster 🏎️💨 {auto-animate="true"}
+
+```{r}
+# tune in parallel
+library(doMC)
+registerDoMC(cores = 10)
+
+bt_tune_fast <- 
+  bt_bonsai_wf |> 
+  tune_race_anova(
+    resamples  = penguin_folds,
+    grid       = big_grid,
+    control    = race_cntl
+  )
+```
+
+## Faster 🏎️💨
+
+```{r}
+autoplot(bt_tune_fast)
+```
+
+## Faster 🏎️💨 {auto-animate="true"}
+
+```{r}
+plot_race(bt_tune_fast)
+```
+
+## 🚀 Finalize Model 🚀 {auto-animate="true"}
+
+```{r}
+bt_best_id <-
+  bt_tune_fast |>
+  select_best(metric = "roc_auc")
+```
+
+## 🚀 Finalize Model 🚀 {auto-animate="true"}
+
+```{r}
+bt_best_id <-
+  bt_tune_fast |>
+  select_best(metric = "roc_auc")
+
+# extract the best model from the workflow
+best_bt_race <-
+  bt_tune_fast |>
+  extract_workflow() |>
+  finalize_workflow(bt_best_id) |>
+  last_fit(penguin_split)
+```
+
+## 🚀 Finalize Model 🚀 {auto-animate="true"}
+
+```{r}
+# collect the metrics for the best model
+best_bt_race |>
+  collect_metrics()
+```
+
+## 🚀 Finalize Model 🚀 {auto-animate="true"}
+
+```{r}
+# plot results of test set fit
+best_bt_race |>
+  collect_predictions() |>
+  roc_curve(sex, .pred_female) |>
+  autoplot()
+```
+
+## Hyperparameter Tuning Summary {.incremental}
+
+::: {.incremental}
+
+1. Use `{tune}` and `{finetune}` to perform hyperparameter tuning
+2. Use race functions (e.g., `tune_race_anova()`) to screen parameters most likely to perform well
+3. Use parallel processing to speed up tuning
+
+:::
+
+## Where to Next? {.center}
+
+. . . 
+
+### Iterative hyperparameter tuning 🌀
